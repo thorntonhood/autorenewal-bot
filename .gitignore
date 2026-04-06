@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 config.yaml
+convoy_session.json
