@@ -10,8 +10,6 @@ Runs daily via cron. Setup takes about 10 minutes.
 
 - macOS with Python 3.11+
 - Access to Convoy at `console.build.rhinternal.net`
-- A personal Slack bot token (see Step 2)
-- An Anthropic API key (see Step 3)
 
 ---
 
@@ -27,9 +25,6 @@ curl -fsSL https://raw.githubusercontent.com/thorntonhood/autorenewal-bot/main/s
 
 The setup script will:
 - Install all dependencies
-- Walk you through getting your Slack bot token and Anthropic API key
-- Write your `config.yaml`
-- Add your API key to `~/.zshrc`
 - Set up the daily cron job
 - Run the bot for the first time
 
