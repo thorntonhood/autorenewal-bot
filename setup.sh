@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+INSTALL_DIR="$HOME/autorenewal-bot"
+
 echo ""
 echo "AutoRenewal Bot Setup"
 echo "====================="
@@ -11,6 +13,13 @@ if ! command -v python3 &>/dev/null; then
   echo "Error: python3 is required but not installed."
   exit 1
 fi
+
+# Clone repo if not already present
+if [ ! -d "$INSTALL_DIR" ]; then
+  echo "Downloading AutoRenewal Bot..."
+  git clone -q https://github.com/thorntonhood/autorenewal-bot.git "$INSTALL_DIR"
+fi
+cd "$INSTALL_DIR"
 
 # Install dependencies
 echo "Installing dependencies..."

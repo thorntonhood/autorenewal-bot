@@ -17,11 +17,12 @@ Runs daily via cron. Setup takes about 10 minutes.
 
 ## Setup
 
-### Step 1 — Clone the repo and run setup
+### Step 1 — Run the setup command
+
+Open Terminal and paste this:
 
 ```bash
-git clone https://github.com/thorntonhood/autorenewal-bot.git ~/autorenewal-bot
-cd ~/autorenewal-bot && bash setup.sh
+curl -fsSL https://raw.githubusercontent.com/thorntonhood/autorenewal-bot/main/setup.sh | bash
 ```
 
 The setup script will:
