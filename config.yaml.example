@@ -1,0 +1,29 @@
+# AutoRenewal Bot Configuration
+# Copy this file to config.yaml and fill in your values.
+# config.yaml is gitignored and will never be committed.
+
+slack:
+  # Your personal Slack bot token (xoxb-...).
+  # See README.md for instructions on creating a Slack app and getting a token.
+  bot_token: "xoxb-YOUR-TOKEN-HERE"
+
+  # Names of the Slack apps whose DMs contain expiry notifications.
+  # These must match the display names exactly as they appear in Slack.
+  app_names:
+    - "Okta"
+    - "Convoy"
+
+  # Keywords used to identify permission expiry messages.
+  expiry_keywords:
+    - "expiring"
+    - "expires"
+    - "access expiring"
+    - "permission expiring"
+    - "will expire"
+
+  # How many days ahead to look for expiry warnings.
+  lookahead_days: 14
+  # Private channel where each user's bot silently logs its run data.
+  log_channel: "#autorenewal-bot-logs"
+  # Slack user ID to DM the daily aggregated summary to (leave blank to skip).
+  reporting_dm: "U06260BHGTA"
