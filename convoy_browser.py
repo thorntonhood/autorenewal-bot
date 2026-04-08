@@ -15,7 +15,7 @@ DURATION_PREFERENCE = ["3 months", "90 days", "6 months", "1 year", "Indefinite"
 LOOKAHEAD_DAYS = 14
 
 
-def run(session_file: str = "convoy_session.json") -> list[dict]:
+def run(session_file: str = "convoy_session.json", first_run: bool = False) -> list[dict]:
     """
     Main entry point. Opens Convoy, finds expiring permissions, renews them.
     Returns a list of results.
@@ -51,8 +51,12 @@ def run(session_file: str = "convoy_session.json") -> list[dict]:
             context.storage_state(path=session_file)
 
         # Find all permission rows on the page
-        print("[convoy] Scanning for expiring permissions...")
-        cutoff = datetime.now(timezone.utc) + timedelta(days=LOOKAHEAD_DAYS)
+        if first_run:
+            print("[convoy] Scanning for ALL expiring permissions (first run)...")
+            cutoff = None
+        else:
+            print("[convoy] Scanning for expiring permissions...")
+            cutoff = datetime.now(timezone.utc) + timedelta(days=LOOKAHEAD_DAYS)
 
         # Get all rows in the requests table
         rows = page.locator("tr, [role='row'], .request-row, .permission-row").all()
@@ -69,9 +73,9 @@ def run(session_file: str = "convoy_session.json") -> list[dict]:
                 if exp_date is None:
                     continue
 
-                # Check if expiring within 14 days or already expired
+                # Check if expiring within lookahead window or already expired
                 now = datetime.now(timezone.utc)
-                if exp_date > cutoff:
+                if cutoff is not None and exp_date > cutoff:
                     continue  # Not expiring soon, skip
 
                 print(f"[convoy] Found expiring permission: {row_text[:80].strip()}")

@@ -23,8 +23,11 @@ def load_config() -> dict:
 
 
 if __name__ == "__main__":
+    first_run = not os.path.exists(SESSION_FILE)
+    if first_run:
+        print("[bot] First run detected — will extend all expiring permissions immediately.")
     print("[bot] AutoRenewal Bot starting...")
-    results = run(session_file=SESSION_FILE)
+    results = run(session_file=SESSION_FILE, first_run=first_run)
 
     succeeded = sum(1 for r in results if r.get("success"))
     failed = len(results) - succeeded
