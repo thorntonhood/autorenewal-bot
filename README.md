@@ -2,7 +2,7 @@
 
 Automatically renews your Convoy permissions before they expire. Reads expiry notifications from your Slack DMs (Okta, Convoy), parses them with Claude, and re-requests access via the Convoy web UI.
 
-Runs daily via cron. Setup takes about 10 minutes.
+Runs daily via cron. Setup takes about 1 minute.
 
 ---
 
@@ -23,16 +23,7 @@ Open Terminal and paste this:
 curl -fsSL https://raw.githubusercontent.com/thorntonhood/autorenewal-bot/main/setup.sh | bash
 ```
 
-The setup script will:
-- Install all dependencies
-- Set up the daily cron job
-- Run the bot for the first time
-
-### Step 2 — Log in to Convoy
-
-When the setup script runs the bot, a browser window will open. Log in to Convoy when prompted. After that, your session is saved and everything runs automatically.
-
-That's it. The bot runs every morning at 8am and renews anything expiring within 14 days.
+That's it. A browser window will open — log in to Convoy once, and everything runs automatically from there. The bot runs every morning at 8am and renews anything expiring soon.
 
 ---
 
