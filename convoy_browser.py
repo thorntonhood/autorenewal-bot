@@ -213,6 +213,7 @@ def _select_combobox_option(page, combobox, option_text: str) -> bool:
 def _fill_renewal_form(page):
     """Fill in the renewal form using downshift combobox dropdowns."""
     comboboxes = page.locator('[role="combobox"]').all()
+    print(f"[convoy]   Found {len(comboboxes)} combobox(es) on form.")
 
     # First combobox — expiration duration
     if len(comboboxes) >= 1:
@@ -222,23 +223,59 @@ def _fill_renewal_form(page):
                 break
         else:
             print("[convoy]   Could not set expiration.")
+    else:
+        print("[convoy]   No comboboxes found — form may not have loaded.")
+        return
 
-    # Second combobox — reason
+    # Reason field — combobox, checkbox, or text input
+    reason_set = False
+
+    # Try second combobox
     if len(comboboxes) >= 2:
         if _select_combobox_option(page, comboboxes[1], REASON_TEXT):
-            print(f"[convoy]   Set reason: {REASON_TEXT}")
-        else:
-            print("[convoy]   Could not set reason.")
+            print(f"[convoy]   Set reason (combobox): {REASON_TEXT}")
+            reason_set = True
+
+    # Try checkbox with value="provide_financial_services"
+    if not reason_set:
+        try:
+            checkbox = page.locator("input[type='checkbox'][value='provide_financial_services']").first
+            if checkbox.count() > 0:
+                if not checkbox.is_checked():
+                    checkbox.click()
+                print(f"[convoy]   Set reason (checkbox): provide_financial_services")
+                reason_set = True
+        except Exception:
+            pass
+
+    # Try textarea[name="reason"]
+    if not reason_set:
+        try:
+            text_input = page.locator("textarea[name='reason']").first
+            if text_input.count() > 0:
+                text_input.fill(REASON_TEXT)
+                print(f"[convoy]   Set reason (textarea): {REASON_TEXT}")
+                reason_set = True
+        except Exception:
+            pass
+
+    if not reason_set:
+        print("[convoy]   Could not set reason.")
 
     # Submit
+    submit = page.locator("button[type='submit'], button").filter(
+        has_text=re.compile("submit|confirm|request|extend", re.IGNORECASE)
+    ).first
+    if submit.count() == 0:
+        all_btns = [b.inner_text().strip() for b in page.locator("button").all() if b.inner_text().strip()]
+        print(f"[convoy]   Could not find submit button. Buttons visible: {all_btns}")
+        return
+    print(f"[convoy]   Clicking submit: '{submit.inner_text().strip()}'")
     try:
-        submit = page.locator("button[type='submit'], button").filter(
-            has_text=re.compile("submit|confirm|request|extend", re.IGNORECASE)
-        ).first
         submit.click()
         page.wait_for_load_state("networkidle")
     except Exception as e:
-        print(f"[convoy]   Could not submit form: {e}")
+        print(f"[convoy]   Submit error: {e}")
 
 
 def _parse_date_from_text(text: str):
@@ -253,12 +290,12 @@ def _parse_date_from_text(text: str):
         r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b',
     ]
 
-    last_match = None
     for pattern in patterns:
-        for match in re.finditer(pattern, text, re.IGNORECASE):
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
             try:
                 dt = dateparser.parse(match.group(), ignoretz=True)
-                last_match = dt.replace(tzinfo=timezone.utc)
+                return dt.replace(tzinfo=timezone.utc)
             except Exception:
                 continue
-    return last_match
+    return None
