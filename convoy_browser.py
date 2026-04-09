@@ -271,11 +271,22 @@ def _fill_renewal_form(page):
         print(f"[convoy]   Could not find submit button. Buttons visible: {all_btns}")
         return
     print(f"[convoy]   Clicking submit: '{submit.inner_text().strip()}'")
+    url_before = page.url
     try:
         submit.click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(3000)
     except Exception as e:
         print(f"[convoy]   Submit error: {e}")
+        return
+    # Check for visible errors
+    errors = page.locator("[role='alert'], [aria-invalid='true'], .error, [class*='error']").all()
+    error_texts = [e.inner_text().strip() for e in errors if e.inner_text().strip()]
+    if error_texts:
+        print(f"[convoy]   Form errors after submit: {error_texts}")
+    elif page.url != url_before:
+        print(f"[convoy]   Submitted — navigated to {page.url}")
+    else:
+        print(f"[convoy]   Submitted — page stayed at {page.url}")
 
 
 def _parse_date_from_text(text: str):
