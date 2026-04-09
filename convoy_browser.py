@@ -245,8 +245,19 @@ def _fill_renewal_form(page):
             checkbox = page.locator("input[type='checkbox'][value='provide_financial_services']").first
             if checkbox.count() > 0:
                 if not checkbox.is_checked():
-                    checkbox.click()
+                    checkbox.click(force=True)
                 print(f"[convoy]   Set reason (checkbox): provide_financial_services")
+                reason_set = True
+        except Exception:
+            pass
+
+    # Try clicking the visible checkbox div next to the input
+    if not reason_set:
+        try:
+            container = page.locator("div:has(input[type='checkbox'][value='provide_financial_services'])").first
+            if container.count() > 0:
+                container.click()
+                print(f"[convoy]   Set reason (checkbox container): provide_financial_services")
                 reason_set = True
         except Exception:
             pass
