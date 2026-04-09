@@ -239,25 +239,21 @@ def _fill_renewal_form(page):
             print(f"[convoy]   Set reason (combobox): {REASON_TEXT}")
             reason_set = True
 
-    # Try checkbox with value="provide_financial_services"
+    # Try checkbox with value="provide_financial_services" — click via JS to trigger React state
     if not reason_set:
         try:
-            checkbox = page.locator("input[type='checkbox'][value='provide_financial_services']").first
-            if checkbox.count() > 0:
-                if not checkbox.is_checked():
-                    checkbox.click(force=True)
-                print(f"[convoy]   Set reason (checkbox): provide_financial_services")
-                reason_set = True
-        except Exception:
-            pass
-
-    # Try clicking the visible checkbox div next to the input
-    if not reason_set:
-        try:
-            container = page.locator("div:has(input[type='checkbox'][value='provide_financial_services'])").first
-            if container.count() > 0:
-                container.click()
-                print(f"[convoy]   Set reason (checkbox container): provide_financial_services")
+            checked = page.evaluate("""
+                () => {
+                    const input = document.querySelector('input[value="provide_financial_services"]');
+                    if (!input) return false;
+                    const visible = input.parentElement.querySelector('[data-testid]');
+                    if (visible) { visible.click(); return true; }
+                    input.click();
+                    return true;
+                }
+            """)
+            if checked:
+                print(f"[convoy]   Set reason (checkbox JS): provide_financial_services")
                 reason_set = True
         except Exception:
             pass
