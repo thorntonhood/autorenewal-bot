@@ -5,14 +5,15 @@ and automatically extends or re-requests each one.
 """
 
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 CONVOY_MY_REQUESTS = "https://console.build.rhinternal.net/convoy/my-requests"
 CONVOY_BASE = "https://console.build.rhinternal.net/convoy"
-REASON_TEXT = "Needed for Full-Time Role"
-DURATION_PREFERENCE = ["3 months", "90 days", "6 months", "1 year", "Indefinite"]
-LOOKAHEAD_DAYS = 14
+REASON_TEXT = "Provide Financial Services"
+DURATION_PREFERENCE = ["3 months", "1 month", "1 week", "1 day", "6 hours", "2 hours"]
+LOOKAHEAD_DAYS = 21
 
 
 def run(session_file: str = "convoy_session.json", first_run: bool = False) -> list[dict]:
@@ -40,13 +41,20 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
         page.goto(CONVOY_MY_REQUESTS, timeout=20000)
         page.wait_for_load_state("networkidle")
 
-        # If redirected to login, wait for user to log in
-        if "login" in page.url.lower() or "okta" in page.url.lower():
-            print("[convoy] Please log in to Convoy in the browser window that opened.")
-            print("[convoy] Waiting up to 2 minutes...")
-            page.wait_for_url("**/convoy**", timeout=120000)
-            page.goto(CONVOY_MY_REQUESTS, timeout=20000)
-            page.wait_for_load_state("networkidle")
+        # If session expired, Convoy shows an inline login button rather than redirecting
+        needs_login = (
+            "login" in page.url.lower()
+            or "okta" in page.url.lower()
+            or "log in" in page.inner_text("body").lower()
+        )
+        if needs_login:
+            print("[convoy] Session expired — please log in to Convoy in the browser window.")
+            print("[convoy] Waiting up to 2 minutes (includes Kolide verification)...")
+            try:
+                page.wait_for_selector("tr.clickable-row", timeout=120000)
+            except PlaywrightTimeout:
+                print("[convoy] Timed out waiting for login. Please run again and log in promptly.")
+                return results
             print("[convoy] Logged in! Saving session...")
             context.storage_state(path=session_file)
 
@@ -58,9 +66,26 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
             print("[convoy] Scanning for expiring permissions...")
             cutoff = datetime.now(timezone.utc) + timedelta(days=LOOKAHEAD_DAYS)
 
-        # Get all rows in the requests table
-        rows = page.locator("tr, [role='row'], .request-row, .permission-row").all()
+        # Wait for the table to render, then get all permission rows
+        try:
+            page.wait_for_selector("tr.clickable-row", timeout=30000)
+        except PlaywrightTimeout:
+            print(f"[convoy] Timed out waiting for rows. Current URL: {page.url}")
+            return results
+        rows = page.locator("tr.clickable-row").all()
         print(f"[convoy] Found {len(rows)} row(s) to check.")
+
+        # First pass: collect permission names that already have an active or pending row
+        active_or_pending = set()
+        for row in rows:
+            try:
+                row_text = row.inner_text()
+                if "active" in row_text.lower() or "pending" in row_text.lower():
+                    cells = row.locator("td").all()
+                    if len(cells) >= 3:
+                        active_or_pending.add(cells[2].inner_text().strip())
+            except Exception:
+                continue
 
         for row in rows:
             try:
@@ -68,15 +93,30 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
                 if not row_text.strip():
                     continue
 
-                # Look for an expiration date in the row
-                exp_date = _parse_date_from_text(row_text)
-                if exp_date is None:
+                cells = row.locator("td").all()
+                perm_name = cells[2].inner_text().strip() if len(cells) >= 3 else ""
+                is_active = "active" in row_text.lower()
+                is_expired = "expir" in row_text.lower()
+
+                # Skip rows that already have a pending request
+                if "pending" in row_text.lower():
                     continue
 
-                # Check if expiring within lookahead window or already expired
-                now = datetime.now(timezone.utc)
-                if cutoff is not None and exp_date > cutoff:
-                    continue  # Not expiring soon, skip
+                # Case 1: Active permission expiring soon — extend it
+                # Case 2: Expired permission with no active/pending version — re-request it
+                if is_active:
+                    exp_date = _parse_date_from_text(row_text)
+                    if exp_date is None:
+                        continue
+                    now = datetime.now(timezone.utc)
+                    if cutoff is not None and exp_date > cutoff:
+                        continue  # Not expiring soon
+                elif is_expired:
+                    if perm_name in active_or_pending:
+                        continue  # Already has an active or pending version
+                    exp_date = _parse_date_from_text(row_text)
+                else:
+                    continue  # Unknown status, skip
 
                 print(f"[convoy] Found expiring permission: {row_text[:80].strip()}")
                 print(f"[convoy]   Expiry: {exp_date.strftime('%Y-%m-%d')}")
@@ -92,8 +132,19 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
 
                 if btn is None:
                     # Try clicking the row itself to open the detail page
+                    url_before = page.url
                     row.click()
                     page.wait_for_load_state("networkidle")
+                    if page.url == url_before:
+                        print("[convoy]   Row click did not navigate. Skipping.")
+                        results.append({"success": False, "row": row_text[:80], "error": "row not navigable"})
+                        continue
+                    # Wait for the action button to render
+                    btn_selector = "button:has-text('Extend Access'), button:has-text('Re-request'), a:has-text('Extend Access'), a:has-text('Re-request')"
+                    try:
+                        page.wait_for_selector(btn_selector, timeout=8000)
+                    except PlaywrightTimeout:
+                        pass
                     for label in ["Extend Access", "Re-request", "Rerequest", "Renew"]:
                         candidate = page.locator(f"button, a", has_text=label)
                         if candidate.count() > 0:
@@ -104,10 +155,19 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
                 if btn is None:
                     print("[convoy]   Could not find Extend/Re-request button. Skipping.")
                     results.append({"success": False, "row": row_text[:80], "error": "button not found"})
+                    page.goto(CONVOY_MY_REQUESTS, timeout=20000)
+                    page.wait_for_selector("tr.clickable-row", timeout=30000)
                     continue
 
                 btn.click()
-                page.wait_for_load_state("networkidle")
+                # Wait for the form to appear (select dropdown with duration options)
+                try:
+                    page.wait_for_selector(
+                        f"select:has(option:has-text('{DURATION_PREFERENCE[0]}'))",
+                        timeout=8000
+                    )
+                except PlaywrightTimeout:
+                    pass
 
                 # Fill in the form
                 _fill_renewal_form(page)
@@ -134,32 +194,46 @@ def run(session_file: str = "convoy_session.json", first_run: bool = False) -> l
     return results
 
 
+def _select_combobox_option(page, combobox, option_text: str) -> bool:
+    """Open a downshift combobox and click the matching option. Returns True on success."""
+    try:
+        combobox.click()
+        page.wait_for_selector('[role="option"]', timeout=5000)
+        option = page.locator('[role="option"]').filter(has_text=option_text).first
+        if option.count() > 0:
+            option.click()
+            return True
+        # Close the dropdown if option not found
+        combobox.click()
+    except Exception:
+        pass
+    return False
+
+
 def _fill_renewal_form(page):
-    """Fill in the renewal form: set duration to 3 months and add reason."""
-    # Set expiration dropdown
-    for duration in DURATION_PREFERENCE:
-        try:
-            option = page.locator("option").filter(has_text=duration)
-            if option.count() > 0:
-                select = page.locator("select").first
-                select.select_option(label=option.first.inner_text())
+    """Fill in the renewal form using downshift combobox dropdowns."""
+    comboboxes = page.locator('[role="combobox"]').all()
+
+    # First combobox — expiration duration
+    if len(comboboxes) >= 1:
+        for duration in DURATION_PREFERENCE:
+            if _select_combobox_option(page, comboboxes[0], duration):
                 print(f"[convoy]   Set expiration: {duration}")
                 break
-        except Exception:
-            continue
+        else:
+            print("[convoy]   Could not set expiration.")
 
-    # Fill in reason
-    try:
-        reason = page.locator("textarea, input[placeholder*='eason'], input[name*='eason']").first
-        reason.fill(REASON_TEXT)
-        print(f"[convoy]   Set reason: {REASON_TEXT}")
-    except Exception:
-        print("[convoy]   Could not find reason field.")
+    # Second combobox — reason
+    if len(comboboxes) >= 2:
+        if _select_combobox_option(page, comboboxes[1], REASON_TEXT):
+            print(f"[convoy]   Set reason: {REASON_TEXT}")
+        else:
+            print("[convoy]   Could not set reason.")
 
     # Submit
     try:
         submit = page.locator("button[type='submit'], button").filter(
-            has_text_regex="submit|confirm|request|extend"
+            has_text=re.compile("submit|confirm|request|extend", re.IGNORECASE)
         ).first
         submit.click()
         page.wait_for_load_state("networkidle")
@@ -179,12 +253,12 @@ def _parse_date_from_text(text: str):
         r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b',
     ]
 
+    last_match = None
     for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
             try:
                 dt = dateparser.parse(match.group(), ignoretz=True)
-                return dt.replace(tzinfo=timezone.utc)
+                last_match = dt.replace(tzinfo=timezone.utc)
             except Exception:
                 continue
-    return None
+    return last_match
