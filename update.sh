@@ -9,6 +9,6 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 echo "Updating AutoRenewal Bot..."
-curl -fsSL https://raw.githubusercontent.com/thorntonhood/autorenewal-bot/main/convoy_browser.py -o "$INSTALL_DIR/convoy_browser.py"
+cd "$INSTALL_DIR" && git pull
 echo "Done. Running bot..."
-cd "$INSTALL_DIR" && .venv/bin/python3 main.py
+.venv/bin/python3 main.py
