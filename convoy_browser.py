@@ -227,6 +227,9 @@ def _fill_renewal_form(page):
         print("[convoy]   No comboboxes found — form may not have loaded.")
         return
 
+    # Wait briefly for reason field to appear after duration selection
+    page.wait_for_timeout(1500)
+
     # Reason field — combobox, checkbox, or text input
     reason_set = False
 
@@ -260,7 +263,9 @@ def _fill_renewal_form(page):
             pass
 
     if not reason_set:
-        print("[convoy]   Could not set reason.")
+        inputs = page.locator("input, textarea, [role='combobox'], [role='checkbox']").all()
+        input_info = [(el.get_attribute("type") or el.get_attribute("role"), el.get_attribute("name") or el.get_attribute("value") or el.inner_text()[:30]) for el in inputs]
+        print(f"[convoy]   Could not set reason. Form inputs visible: {input_info}")
 
     # Submit
     submit = page.locator("button[type='submit'], button").filter(
